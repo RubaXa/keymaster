@@ -57,25 +57,43 @@
 
     Evidence.TestCase.extend('KeymasterTest', {
       testShortcut: function(t){
-        var cnt = 0;
-        key('a', function(){ cnt++ });
-        keydown(65);
-        keyup(65);
+        var cnt = 0,
+          order = [],
+          handle1 = function(){ cnt++; order.push(1) },
+          handle2 = function(){ order.push(2) },
+          handle3 = function(){ order.push(3) };
+
+        key('a', handle1);
+        key('a', handle2);
+        key('a', handle3);
+
+        keydown(65); keyup(65);
         t.assertEqual(1, cnt);
-        keydown(65);
-        keyup(65);
-        t.assertEqual(2, cnt);
+        t.assertEqual(order+'', '3,2,1');
+
+        order = [];
+        key('a', handle2);
+
+        keydown(65); keyup(65);
+        t.assertEqual(order+'', '2,3,1');
+
+        order = [];
+        key.off('a', handle2);
+
+        keydown(65); keyup(65);
+        t.assertEqual(order+'', '3,1');
       },
 
       testUnbind: function(t){
         var cnt = 0;
         key('a', function(){ cnt++ });
-        keydown(65);
-        keyup(65);
+
+        keydown(65); keyup(65);
         t.assertEqual(1, cnt);
+
         key.unbind('a');
-        keydown(65);
-        keyup(65);
+
+        keydown(65); keyup(65);
         t.assertEqual(1, cnt);
       },
 
@@ -315,7 +333,7 @@
         key.setScope('all');
         keydown(65); keyup(65);
 
-        t.assertEqual('abBaba', sequence);
+        t.assertEqual('aBbaba', sequence);
 
         // it should not call second callback after changing scope in one of callbacks
         var sequence = '';
@@ -379,7 +397,7 @@
         keydown(65); keyup(65);
         keydown(66); keyup(66);
 
-        t.assertEqual('abaAbBab', sequence);
+        t.assertEqual('abAaBbab', sequence);
       },
 
       testUnbindWithScope: function(t){

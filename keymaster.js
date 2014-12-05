@@ -3,6 +3,8 @@
 //     keymaster.js may be freely distributed under the MIT license.
 
 ;(function(global){
+  'use strict';
+
   var k,
     _handlers = {},
     _mods = { 16: false, 18: false, 17: false, 91: false },
@@ -94,7 +96,8 @@
     scope = getScope();
 
     // for each potential shortcut
-    for (i = 0; i < _handlers[key].length; i++) {
+    i = _handlers[key].length;
+    while (i--) {
       handler = _handlers[key][i];
 
       // see if it's in the current scope
@@ -104,11 +107,16 @@
         for(k in _mods)
           if((!_mods[k] && index(handler.mods, +k) > -1) ||
             (_mods[k] && index(handler.mods, +k) == -1)) modifiersMatch = false;
+
         // call the handler and stop the event if neccessary
         if((handler.mods.length == 0 && !_mods[16] && !_mods[18] && !_mods[17] && !_mods[91]) || modifiersMatch){
           if(handler.method(event, handler)===false){
             event.preventDefault();
             event.stopPropagation();
+          }
+
+          if (event.isImmediatePropagationStopped()) {
+          	return;
           }
         }
       }
@@ -116,12 +124,18 @@
   };
 
   function fixEvent(event) {
-    var defaultPrevented = false;
+    var defaultPrevented = false,
+    	immediatePropagationStopped = false,
+    	stopImmediatePropagation = event.stopImmediatePropagation;
 
     event.target = event.target || event.srcElement;
 
     !event.isDefaultPrevented && (event.isDefaultPrevented = function () {
       return defaultPrevented;
+    });
+
+    !event.isImmediatePropagationStopped && (event.isImmediatePropagationStopped = function () {
+      return immediatePropagationStopped;
     });
 
     !event.preventDefault && (event.preventDefault = function () {
@@ -132,6 +146,12 @@
     !event.stopPropagation && (event.stopPropagation = function () {
       event.cancelBubble = false;
     });
+
+    event.stopImmediatePropagation = function () {
+      immediatePropagationStopped = true;
+      event.stopPropagation();
+      stopImmediatePropagation && stopImmediatePropagation.call(event);
+    };
   };
 
   function bodyContains(el) {
@@ -170,7 +190,8 @@
 
   // parse and assign shortcut
   function assignKey(key, scope, method){
-    var keys, mods;
+    var keys, mods, idx;
+
     keys = getKeys(key);
     if (method === undefined) {
       method = scope;
@@ -187,17 +208,17 @@
         key = [key[key.length-1]];
       }
       // convert to keycode and...
-      key = key[0]
+      key = key[0];
       key = code(key);
       // ...store handler
       if (!(key in _handlers)) _handlers[key] = [];
-      _handlers[key].push({
-        shortcut: keys[i],
-        scope: scope,
-        method: method,
-        key: keys[i],
-        mods: mods
-      });
+
+      idx = findHandleIndex(key, scope, method, mods);
+      if (idx > -1) { // exists key listener
+        _handlers[key].push(_handlers[key].splice(idx, 1)[0]);
+      } else {
+        _handlers[key].push({ shortcut: keys[i], scope: scope, method: method, key: keys[i], mods: mods });
+      }
     }
   };
 
@@ -205,16 +226,16 @@
   function unbindKey(key, scope, method) {
     var multipleKeys, keys,
       mods = [],
-      i, j, obj;
+      i, idx;
 
     multipleKeys = getKeys(key);
-    if (typeof scope === 'function') {
+    if (!scope || typeof scope === 'function') {
       method = scope;
       scope = 'all';
     }
 
-    for (j = 0; j < multipleKeys.length; j++) {
-      keys = multipleKeys[j].split('+');
+    for (i = 0; i < multipleKeys.length; i++) {
+      keys = multipleKeys[i].split('+');
 
       if (keys.length > 1) {
         mods = getMods(keys);
@@ -226,19 +247,32 @@
       if (scope === undefined) {
         scope = getScope();
       }
-      if (!_handlers[key]) {
-        return;
-      }
-      for (i = 0; i < _handlers[key].length; i++) {
-        obj = _handlers[key][i];
+
+      do {
+        idx = findHandleIndex(key, scope, method, mods);
+        if (idx > -1) { // remove key listener
+          _handlers[key].splice(idx, 1);
+        }
+      } while (idx != -1);
+    }
+  };
+
+  function findHandleIndex(key, scope, method, mods) {
+    var i, obj, handlers = _handlers[key];
+
+    if (handlers) {
+      for (i = 0; i < handlers.length; i++) {
+        obj = handlers[i];
         // only clear handlers if correct scope and mods match
         if (obj.scope === scope && (method === undefined || obj.method === method) && compareArray(obj.mods, mods)) {
-          _handlers[key].splice(i, 1);
-          i--;
+          return i;
         }
       }
     }
+
+    return -1;
   };
+
 
   // Returns true if the key with code 'keyCode' is currently down
   // Converts strings into key codes.
@@ -338,5 +372,4 @@
   global.key.off = unbindKey;
 
   if(typeof module !== 'undefined') module.exports = assignKey;
-
 })(this);
