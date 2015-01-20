@@ -128,7 +128,7 @@
     	immediatePropagationStopped = false,
     	stopImmediatePropagation = event.stopImmediatePropagation;
 
-    event.target = event.target || event.srcElement;
+    !event.target && (event.target = event.srcElement);
 
     !event.isDefaultPrevented && (event.isDefaultPrevented = function () {
       return defaultPrevented;
